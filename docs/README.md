@@ -11,7 +11,7 @@ No claims. No dispute resolution. No consistency-of-statements surface. Pure ope
 intelligence.
 
 - **Network:** GenLayer Bradbury testnet (chain id `4221`)
-- **Contract address:** [`0xBeEbD3180f4644cd58525f46E486Ef1f266E9f67`](https://explorer-bradbury.genlayer.com/address/0xBeEbD3180f4644cd58525f46E486Ef1f266E9f67)
+- **Contract address:** [`0x911B39fF368d872E1E98F084F2794C2018432C39`](https://explorer-bradbury.genlayer.com/address/0x911B39fF368d872E1E98F084F2794C2018432C39)
 - **Explorer:** https://explorer-bradbury.genlayer.com
 
 ## The trust problem

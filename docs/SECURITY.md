@@ -112,13 +112,34 @@ validated result.
 
 ## 8. Access control
 
-- `register_policy`: open to any address — this is deliberate; any protocol should be able to onboard
-  itself without a gatekeeper.
-- `update_policy` / `deactivate_policy`: gated to `gl.message.sender_address == policy["owner"]`,
-  checked deterministically before any other logic runs.
-- `evaluate_policy`: open to any address by design — the whole point is that a keeper, a cron job, or
-  any interested party can trigger evaluation of an active policy; the security guarantee comes from
-  what evaluation can and cannot produce (§3–§6), not from restricting who can ask for one.
+Helm has no contract-level admin role gating any write — `contract_owner` (set to the deployer in
+`__init__`) is stored purely as informational provenance, surfaced via `get_contract_info`, and is
+never checked by any method. This is deliberate: Helm is permissionless multi-tenant infrastructure,
+not a project any one party administers. Access control instead applies **per policy**, checked
+against each policy's own stored `owner` field:
+
+| Method | Who can call | Check | Where enforced |
+|---|---|---|---|
+| `register_policy` | anyone | none (by design — no gatekeeper for onboarding) | n/a |
+| `update_policy` | the policy's own owner only | `gl.message.sender_address.as_hex == policy["owner"]` | before any other logic, deterministically |
+| `deactivate_policy` | the policy's own owner only | same as above | before any other logic, deterministically |
+| `evaluate_policy` | anyone | none (by design — any keeper/cron/operator can trigger) | n/a |
+| `get_policy` / `get_evaluation` / `get_policies_by_owner` / `get_latest_evaluation` / `get_contract_info` | anyone (view, no gas) | none | n/a |
+
+`update_policy`/`deactivate_policy` additionally require `policy["active"]` to still be true —
+checked deterministically alongside the owner check, before any nondet call, per §7.
+
+Verified live against the deployed contract (not just direct-mode tests): a funded, unrelated wallet
+attempting `update_policy` on a policy it doesn't own reverts with `FINISHED_WITH_ERROR` /
+`"Only the policy owner may update it."` — see [`SUBMISSION.md`](./SUBMISSION.md) for the transaction
+hash. The same assertion is covered by `tests/direct/test_update_policy_only_owner_can_update` and
+`tests/direct/test_deactivate_policy_only_owner_and_blocks_future_evaluation` for every future change.
+
+Cross-contract access control (a `trusted_callers` registry gating which other contracts may act on
+Helm's state) does not apply here: Helm makes **zero** cross-contract calls in either direction —
+it never reads nor writes another contract, and nothing calls into Helm to mutate its state except a
+direct, wallet-signed transaction from the caller themself. The entire trust boundary is
+caller-address-vs-stored-owner, exactly as the table above states.
 
 ## 9. Storage design
 

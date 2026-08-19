@@ -44,6 +44,16 @@ VALID_DECISIONS = frozenset(
 
 _URL_RE = re.compile(r"https?://[^\s<>\"']+")
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+# Curly braces and triple-backtick fences are stripped from every
+# user-controlled/fetched string before it reaches the prompt: the response
+# schema instructs the model to reply with ONLY a single JSON object, and a
+# policy_text/action_mapping/web-fetched value containing a stray "}" or a
+# fake ```json fence is a concrete way to try to convince the model a JSON
+# object has already started/ended at an attacker-chosen point, smuggling a
+# fabricated decision block past the real one. Braces are not meaningful
+# content in an operational policy description, so removing them costs
+# nothing legitimate.
+_STRUCTURAL_CHARS_RE = re.compile(r"[{}]|```")
 
 # Secondary heuristic layer only -- the primary defense against prompt
 # injection is structural: fencing user content inside clearly labelled
@@ -66,12 +76,14 @@ _INJECTION_PATTERNS = [
 
 
 def _sanitize_input(text, max_len: int) -> str:
-    """Strip control chars/null bytes, apply a secondary injection-pattern
-    scrub, and hard-cap length. Applied to every user-controlled string
-    before it is stored or ever inserted into a prompt."""
+    """Strip control chars/null bytes, structural JSON/fence characters,
+    apply a secondary injection-pattern scrub, and hard-cap length. Applied
+    to every user-controlled string before it is stored or ever inserted
+    into a prompt."""
     if not isinstance(text, str):
         return ""
     cleaned = _CONTROL_CHARS_RE.sub("", text)
+    cleaned = _STRUCTURAL_CHARS_RE.sub("", cleaned)
     for pattern in _INJECTION_PATTERNS:
         cleaned = pattern.sub("[FILTERED]", cleaned)
     return cleaned.strip()[:max_len]
@@ -81,6 +93,7 @@ def _sanitize_web_content(text, max_len: int) -> str:
     if not isinstance(text, str):
         return ""
     cleaned = _CONTROL_CHARS_RE.sub("", text)
+    cleaned = _STRUCTURAL_CHARS_RE.sub("", cleaned)
     for pattern in _INJECTION_PATTERNS:
         cleaned = pattern.sub("[FILTERED]", cleaned)
     return cleaned.strip()[:max_len]

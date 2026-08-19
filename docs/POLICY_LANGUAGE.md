@@ -18,6 +18,23 @@ deterministically records `NO_ACTION` without ever calling an LLM.
 > "If the collateral ratio reported at https://api.example.com/vault/status drops below 150%, pause
 > the vault."
 
+**For any policy whose decision carries real consequences (pausing a protocol, moving funds
+downstream, adjusting a live parameter), cite 2–3 independent sources rather than one.** Helm supports
+up to 3 URLs per policy (extracted from `policy_text` + `action_mapping` combined) and shows all of
+them to the model as combined evidence in a single evaluation — a single source being wrong, stale, or
+temporarily compromised is a real risk for a high-stakes trigger, and independent corroboration is
+cheap to add. Helm does not hard-enforce a minimum source count, since some policies legitimately have
+exactly one authoritative source (an official registry, a protocol's own canonical status endpoint)
+and forcing a second source in those cases would just add noise — this is a judgment call left to the
+policy author, not the contract.
+
+**Good (single authoritative source, appropriate for this policy):**
+> "If https://registry.example.gov/status shows the entity as suspended, issue an ALERT."
+
+**Good (multi-source, appropriate for a higher-stakes trigger):**
+> "If both https://api.example.com/price and https://api.example-mirror.com/price show a price more
+> than 15% below the 24h reference, PAUSE the vault."
+
 ## 2. State the condition as a single, checkable threshold
 
 The model evaluates strictly against what the fetched data shows *right now* — it has no memory of

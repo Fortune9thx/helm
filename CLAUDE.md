@@ -34,3 +34,11 @@ These are hard-won, live-verified facts about the current Bradbury GenVM build. 
 ## Deployment / GitHub / Vercel
 
 These are **never** performed autonomously. Always stop and get explicit confirmation from the user immediately before: switching the active wallet/account, switching network, running an actual deploy transaction, creating or pushing to a GitHub repo, or deploying to Vercel — even mid-task, even after a general go-ahead earlier in the conversation.
+
+### Deploy troubleshooting
+
+- **Verify code persisted** after a deploy: `genlayer code <address>` should return the exact source. A deploy showing `ACCEPTED`/`AGREE`/`FINISHED_WITH_RETURN` is strong evidence already, but this is the explicit, direct confirmation.
+- **A transient revert** (network blip, one validator timeout) is usually safe to retry once — check `txExecutionResultName`, not just `status_name: ACCEPTED` (consensus can be reached *on an error*).
+- **`result_code: 2`** on a deploy attempt typically means the `Depends` header hash on line 1 doesn't match what the target GenVM build expects — verify against a known-good recent deploy before assuming a code bug.
+- **A transaction stuck in `PROPOSING`** for an extended period is usually network congestion, not a stuck/broken transaction — back off and poll less aggressively rather than resubmitting.
+- Contracts have no upgrade mechanism — a contract-source fix always means a fresh deploy at a new address. Update `frontend/lib/contracts.ts`, `docs/README.md`, and `docs/SUBMISSION.md` together whenever the canonical address changes; don't leave a stale address referenced in one file after redeploying.

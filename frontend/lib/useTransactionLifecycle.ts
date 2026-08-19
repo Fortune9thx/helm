@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { TransactionStatus } from "genlayer-js/types";
 import type { GenLayerClient, GenLayerChain, GenLayerTransaction } from "genlayer-js/types";
 import { pollConsensusStatus, PollCancelledError } from "./helm-client";
@@ -33,6 +33,18 @@ const INITIAL_STATE: TransactionLifecycleState = {
 export function useTransactionLifecycle(client: GenLayerClient<GenLayerChain> | null) {
   const [state, setState] = useState<TransactionLifecycleState>(INITIAL_STATE);
   const cancelledRef = useRef(false);
+
+  // Cancellation must not depend on every call site remembering to call
+  // reset() on unmount -- a user navigating away mid-poll (closing the
+  // evaluate dialog, routing to a different page) would otherwise leave
+  // pollConsensusStatus's loop running against an unmounted component,
+  // calling setState on it every tick. This effect guarantees every
+  // consumer of this hook stops polling on unmount regardless.
+  useEffect(() => {
+    return () => {
+      cancelledRef.current = true;
+    };
+  }, []);
 
   const reset = useCallback(() => {
     cancelledRef.current = true;
