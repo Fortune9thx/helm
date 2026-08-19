@@ -43,10 +43,22 @@ export function EvaluateClient({ policyId }: { policyId: string }) {
 
   async function trigger() {
     setFreshResult(null);
-    await lifecycle.run(async () => {
-      if (!client) throw new Error("Connect a wallet first.");
-      return evaluatePolicy(client, policyId);
-    });
+    // requireFinalized: true -- ACCEPTED can still be appealed and reversed
+    // before FINALIZED. evaluate_policy's whole purpose is producing a
+    // decision a downstream contract or keeper acts on, so this UI must not
+    // claim "recorded on-chain" until the outcome is actually permanent;
+    // showing that at ACCEPTED could lead a keeper to act on a decision
+    // that later gets reversed on appeal. Every other Helm write
+    // (register/update/deactivate) is a read-only fact if reversed --
+    // nothing downstream is triggered off them -- so they intentionally
+    // stay at the faster ACCEPTED-terminal default.
+    await lifecycle.run(
+      async () => {
+        if (!client) throw new Error("Connect a wallet first.");
+        return evaluatePolicy(client, policyId);
+      },
+      { requireFinalized: true }
+    );
   }
 
   useEffect(() => {
@@ -103,7 +115,11 @@ export function EvaluateClient({ policyId }: { policyId: string }) {
         )}
 
         {!fixedEvalId && lifecycle.state.phase !== "idle" && !freshResult && (
-          <TransactionPanel state={lifecycle.state} onReset={lifecycle.reset} successLabel="Evaluation recorded on-chain" />
+          <TransactionPanel
+            state={lifecycle.state}
+            onReset={lifecycle.reset}
+            successLabel="Finalized on-chain — decision is now permanent"
+          />
         )}
 
         {displayEval && (

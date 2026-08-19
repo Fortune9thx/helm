@@ -154,3 +154,20 @@ verified read reliability. Non-`TreeMap` top-level attributes (`contract_owner: 
   call, which is the natural rate limiter), the same shape as any open `register`/`mint`-style method,
   and not unique to Helm — but it is a real, unbounded growth path worth naming explicitly rather than
   leaving implicit.
+
+## 11. Frontend finality gating
+
+`ACCEPTED` consensus can still be appealed and reversed before `FINALIZED` settles the appeal window.
+For most Helm writes this doesn't matter — if `register_policy`/`update_policy`/`deactivate_policy`
+were reversed on appeal, the practical effect is just that a record disappears on a later read, which
+is a read-only fact nothing else depends on. `evaluate_policy` is different: its entire purpose is
+producing a decision "any downstream contract or keeper can act on"
+([`README.md`](./README.md#how-to-use-it)) — if the frontend claimed success at `ACCEPTED` and the
+outcome was later reversed on appeal, a keeper watching that UI could have already acted on a `PAUSE`
+decision that never became permanent.
+
+`frontend/lib/helm-client.ts`'s `pollConsensusStatus` supports a `requireFinalized` option precisely
+for this distinction, and `frontend/app/evaluate/[id]/EvaluateClient.tsx` is the only call site that
+sets it — every other write intentionally stays on the faster `ACCEPTED`-terminal default. The
+`ConsensusVisualizer` still shows live progress at `ACCEPTED` ("Consensus reached"), but the outer
+transaction panel does not claim "recorded on-chain" until `FINALIZED` is actually observed.
