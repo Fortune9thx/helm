@@ -1,0 +1,180 @@
+@import "tailwindcss";
+
+:root {
+  /* Obsidian Command -- dark-only command-deck aesthetic. */
+  --color-void: #05050a;
+  --color-void-raised: #0a0a14;
+  --color-panel: rgba(13, 14, 24, 0.6);
+  --color-panel-solid: #0d0e18;
+  --color-border: rgba(0, 240, 255, 0.14);
+  --color-border-strong: rgba(0, 240, 255, 0.38);
+
+  --color-cyan: #00f0ff;
+  --color-cyan-dim: #0aa8b5;
+  --color-cyan-soft: rgba(0, 240, 255, 0.12);
+
+  --color-amber: #ffb800;
+  --color-amber-dim: #c98f00;
+  --color-amber-soft: rgba(255, 184, 0, 0.12);
+
+  --color-rose: #ff3b5c;
+  --color-rose-soft: rgba(255, 59, 92, 0.12);
+
+  --color-text-primary: #f5f7fa;
+  --color-text-secondary: #a0a8ba;
+  --color-text-muted: #656c7e;
+
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+}
+
+@theme inline {
+  --color-void: var(--color-void);
+  --color-void-raised: var(--color-void-raised);
+  --color-panel: var(--color-panel);
+  --color-panel-solid: var(--color-panel-solid);
+  --color-border: var(--color-border);
+  --color-border-strong: var(--color-border-strong);
+  --color-cyan: var(--color-cyan);
+  --color-cyan-dim: var(--color-cyan-dim);
+  --color-cyan-soft: var(--color-cyan-soft);
+  --color-amber: var(--color-amber);
+  --color-amber-dim: var(--color-amber-dim);
+  --color-amber-soft: var(--color-amber-soft);
+  --color-rose: var(--color-rose);
+  --color-rose-soft: var(--color-rose-soft);
+  --color-text-primary: var(--color-text-primary);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-muted: var(--color-text-muted);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-void);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  position: relative;
+  min-height: 100%;
+}
+
+/* Slow-drifting radial gradients + a very faint noise layer -- the ambient
+   "command deck" backdrop referenced everywhere in this app. Fixed and
+   behind everything (z-index -1), so it never affects layout or scroll. */
+.ambient-field {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 18% 20%, rgba(0, 240, 255, 0.09), transparent 42%),
+    radial-gradient(circle at 82% 68%, rgba(255, 184, 0, 0.06), transparent 45%),
+    radial-gradient(circle at 50% 100%, rgba(0, 240, 255, 0.05), transparent 55%),
+    var(--color-void);
+  background-size: 180% 180%, 180% 180%, 140% 140%, 100% 100%;
+  animation: ambient-drift 32s ease-in-out infinite alternate;
+}
+
+.ambient-field::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+@keyframes ambient-drift {
+  0% {
+    background-position: 0% 0%, 100% 100%, 50% 100%, 0 0;
+  }
+  100% {
+    background-position: 12% 8%, 88% 92%, 46% 96%, 0 0;
+  }
+}
+
+/* Glass card: 1px cyan border at low opacity + inner glow -- the one
+   surface language used everywhere in this app. */
+.glass-panel {
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    inset 0 0 32px rgba(0, 240, 255, 0.025),
+    0 8px 32px rgba(0, 0, 0, 0.35);
+  transition: border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease;
+}
+
+.glass-panel-hover:hover {
+  border-color: var(--color-border-strong);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 0 40px rgba(0, 240, 255, 0.05),
+    0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.cyan-gradient-text {
+  background: linear-gradient(120deg, #ffffff, var(--color-cyan) 55%, var(--color-cyan-dim));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2.2s ease-in-out infinite;
+}
+
+@keyframes ring-expand {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
+::selection {
+  background: rgba(0, 240, 255, 0.25);
+  color: var(--color-text-primary);
+}
+
+* {
+  scrollbar-color: rgba(0, 240, 255, 0.25) transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(0, 240, 255, 0.18);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 240, 255, 0.32);
+  background-clip: padding-box;
+}
