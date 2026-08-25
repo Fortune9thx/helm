@@ -63,8 +63,13 @@ and a `genlayer trace` pull on a real transaction for full GenVM execution visib
   web call). The `"runner comment does not start with version"` warning is the same benign,
   already-investigated non-issue as prior sessions (defaults to `v0.1.0`, not a deploy blocker).
 - Finding #14, live: registered a policy with `https://en.wikipedia.org/wiki/2_%2B_2,` (trailing
-  comma, no space) on the redeployed contract, evaluated it, and confirmed `data_sources_used`
-  contains the clean URL with the comma stripped.
+  comma, no space) on the redeployed contract and evaluated it. Bradbury was under real network
+  congestion at the time (two prior attempts hit `LEADER_TIMEOUT`/CLI wait-timeout, both consistent
+  with the "back off and retry" guidance in `CLAUDE.md`, not a code defect); a subsequent attempt
+  reached consensus cleanly (`ACCEPTED`/`AGREE`/`FINISHED_WITH_RETURN`) and
+  `get_latest_evaluation` confirms `data_sources_used: ["https://en.wikipedia.org/wiki/2_%2B_2"]` —
+  the trailing comma from the registered policy text is not present in the fetched URL. Decisive,
+  live, on-chain proof the fix works.
 - Finding #15, live: `genlayer call ... get_policies_by_owner --args "not-a-real-address"` against the
   redeployed contract returns a decode-able error payload containing the literal ASCII
   `"Invalid owner address."` and `"kind":"UserError"` — confirmed by inspecting the raw return bytes
