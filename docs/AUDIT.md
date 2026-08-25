@@ -76,6 +76,27 @@ and a `genlayer trace` pull on a real transaction for full GenVM execution visib
   (the CLI's `call` path doesn't format view-method reverts as cleanly as `write` does, but the
   on-chain behavior is exactly as intended).
 
+## Third pass — 2026-08-19 (surfaced by the user's own manual testing)
+
+While manually testing the deployed app with a real wallet, the user hit `LEADER_TIMEOUT` on an
+`evaluate_policy` call and separately noticed the *same* transaction hash showed `LEADER_TIMEOUT` in
+the app but `VALIDATORS_TIMEOUT` on GenExplorer shortly after. That discrepancy was investigated
+directly rather than dismissed.
+
+| # | File:Line | Severity | Scenario | Fix | Status |
+|---|---|---|---|---|---|
+| 16 | `frontend/lib/helm-client.ts:pollConsensusStatus` (was) | Medium | The poller returned as soon as it observed *any* status in `TERMINAL_STATUSES`/`FINALIZED_REQUIRED_STATUSES`, on the assumption that `genlayer-js`'s own `DECIDED_STATES` classification means the status is permanently settled the moment it's first seen. Live evidence contradicts that: transaction `0x13e9de63...c614fcd` was fetched directly via `client.getTransaction` and showed `statusName: "VALIDATORS_TIMEOUT"` with `numOfRounds: "6"` — proof of multiple internal processing passes after the status first looked terminal (the app's earlier poll had caught it mid-settling, reporting the since-superseded `LEADER_TIMEOUT`). A user or downstream integrator trusting the first terminal reading could act on a status that changes moments later. | A terminal-looking status must now be observed on two consecutive polls before `pollConsensusStatus` trusts it and returns. Verified with two standalone scenario scripts (not committed, run and discarded): the exact live sequence (`LEADER_TIMEOUT` once → `VALIDATORS_TIMEOUT` twice) correctly does *not* return on the lone `LEADER_TIMEOUT` and confirms on the second `VALIDATORS_TIMEOUT`; a normal clean success path (`ACCEPTED` twice) still confirms correctly, at the cost of exactly one extra poll interval. | **Fixed** |
+
+**Root cause, as far as it can be determined without GenLayer's internal consensus-engine source:**
+`0x13e9de63...c614fcd`'s raw data shows 3 of 5 validators independently timed out
+(`validatorVotesName: [..., "TIMEOUT", "TIMEOUT", "TIMEOUT"]`) evaluating a policy against a real
+external CoinGecko URL — a live, non-Helm-controlled API, plausibly slow or rate-limiting GenVM's
+fetch. `lastRound.rotationsLeft` was unchanged from `initialRotations` (both `"5"`), so
+`consensusMaxRotations` (leader-rotation retries) was not what was in flight here; `numOfRounds: "6"`
+is the more direct evidence of multiple internal passes. The practical fix does not depend on
+pinning the exact mechanism — requiring confirmation before trusting *any* terminal-looking status is
+correct regardless of which internal process caused it to still be settling.
+
 ## Redeployment note
 
 Contracts have no upgrade mechanism, so each contract-level fix required a fresh deploy:

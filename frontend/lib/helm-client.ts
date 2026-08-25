@@ -249,6 +249,19 @@ export class PollCancelledError extends Error {
  * transient RPC failure is tolerated up to MAX_CONSECUTIVE_RPC_FAILURES
  * times before giving up, since one bad request doesn't mean the
  * transaction itself failed.
+ *
+ * A terminal-looking status is required to be observed on two consecutive
+ * polls before it is trusted. Confirmed live (2026-08-19, against
+ * transaction 0x13e9de63...c614fcd on the deployed Helm contract): the same
+ * transaction hash genuinely reported LEADER_TIMEOUT at one poll and
+ * VALIDATORS_TIMEOUT on a later read -- genlayer-js's own DECIDED_STATES
+ * classifies both as terminal, but the raw chain status can still change
+ * after first reaching one of them (that transaction's `numOfRounds` was 6,
+ * evidence of multiple internal processing passes after the first
+ * terminal-looking read). Returning on the very first terminal reading can
+ * therefore show the user a status that gets superseded moments later.
+ * Requiring the same status twice in a row costs at most one extra poll
+ * interval in the common case where nothing was actually still settling.
  */
 export async function pollConsensusStatus(
   client: GenLayerClient<GenLayerChain>,
@@ -270,6 +283,7 @@ export async function pollConsensusStatus(
   const effectiveIntervalMs = intervalMs ?? (requireFinalized ? 5000 : 1500);
   const effectiveMaxAttempts = maxAttempts ?? (requireFinalized ? 100 : 120);
   let lastStatus: TransactionStatus | null = null;
+  let pendingTerminalStatus: TransactionStatus | null = null;
   let consecutiveFailures = 0;
 
   for (let attempt = 0; attempt < effectiveMaxAttempts; attempt++) {
@@ -294,7 +308,15 @@ export async function pollConsensusStatus(
     }
 
     if (terminalStatuses.has(status)) {
-      return transaction;
+      if (pendingTerminalStatus === status) {
+        return transaction;
+      }
+      // First sighting of this terminal status (or it differs from a prior
+      // unconfirmed one, e.g. LEADER_TIMEOUT -> VALIDATORS_TIMEOUT) --
+      // note it and poll once more before trusting it.
+      pendingTerminalStatus = status;
+    } else {
+      pendingTerminalStatus = null;
     }
 
     if (isCancelled()) throw new PollCancelledError();
