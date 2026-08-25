@@ -115,6 +115,44 @@ def test_evaluate_without_data_source_url_is_deterministic_no_action():
         assert evaluation["data_sources_used"] == []
 
 
+def test_evaluate_strips_trailing_punctuation_from_urls():
+    """Natural prose routinely follows a URL directly with a comma or
+    period ('...at https://api.example.com/status, drops below...').
+    Regression test for a real functional bug: without stripping, the
+    fetched URL is silently wrong (trailing comma included), which used to
+    surface only as an unexplained NO_ACTION with no indication why."""
+    vm = VMContext()
+    owner, = create_test_addresses(1)
+    with vm.activate():
+        text_with_trailing_punctuation = (
+            "If the ratio at https://api.example.com/vault-status, drops below 150%, pause the vault."
+        )
+        helm, policy_id = _deploy_with_policy(
+            vm, owner, text=text_with_trailing_punctuation, mapping=ACTION_MAPPING
+        )
+        vm.mock_web(r"example\.com/vault-status$", _web("Collateral ratio is 121%."))
+        vm.mock_llm(
+            r"Equivalence\s+Principle",
+            _wrapped_json(
+                {
+                    "decision": "PAUSE",
+                    "confidence": "0.90",
+                    "reasoning": "Below threshold.",
+                    "cited_data": ["121%"],
+                    "recommended_action_payload": {},
+                }
+            ),
+        )
+        eval_id = helm.evaluate_policy(policy_id)
+        evaluation = helm.get_evaluation(eval_id)
+
+        # The mock_web pattern is anchored with $ (no trailing comma) --
+        # this only matches, and the mocked "121%" content only reaches the
+        # prompt, if the extracted URL had its trailing comma stripped.
+        assert evaluation["data_sources_used"] == ["https://api.example.com/vault-status"]
+        assert evaluation["decision"] == "PAUSE"
+
+
 def test_evaluate_confidence_bare_float_never_crashes():
     """Regression test for the calldata-has-no-float class of bug: even if
     the LLM returns confidence as a bare JSON number (not a quoted string,

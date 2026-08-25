@@ -99,18 +99,31 @@ def _sanitize_web_content(text, max_len: int) -> str:
     return cleaned.strip()[:max_len]
 
 
+_TRAILING_PUNCTUATION = ".,;:!?)]}\"'"
+
+
 def _extract_urls(text: str) -> list:
     """Deterministic parse of already-stored policy text: pulls explicit
     https(s):// URLs a protocol operator embedded as its data source(s).
     Helm has no separate 'data_sources' contract parameter -- operators
     name the live data they want checked directly inside policy_text or
-    action_mapping (see docs/POLICY_LANGUAGE.md)."""
+    action_mapping (see docs/POLICY_LANGUAGE.md).
+
+    Trailing punctuation is stripped from each match: natural policy prose
+    routinely follows a URL directly with a comma or period ("...at
+    https://api.example.com/status, drops below..."), and the regex has no
+    way to know that punctuation isn't part of the URL. Left unstripped, the
+    fetched URL is silently wrong (typically a 404/empty body), which
+    surfaces only as an unexplained NO_ACTION -- fixing it here means a
+    naturally-written policy just works instead of requiring the author to
+    know to add a space before punctuation."""
     if not isinstance(text, str):
         return []
     seen = []
     for match in _URL_RE.findall(text):
-        if match not in seen:
-            seen.append(match)
+        cleaned = match.rstrip(_TRAILING_PUNCTUATION)
+        if cleaned and cleaned not in seen:
+            seen.append(cleaned)
     return seen[:MAX_DATA_SOURCES]
 
 
@@ -502,7 +515,10 @@ shape:
 
     @gl.public.view
     def get_policies_by_owner(self, owner: str) -> list:
-        owner_hex = Address(owner).as_hex
+        try:
+            owner_hex = Address(owner).as_hex
+        except Exception:
+            raise gl.vm.UserError("Invalid owner address.")
         ids = json.loads(self.owner_policy_ids.get(owner_hex, "[]"))
         out = []
         for policy_id in ids:

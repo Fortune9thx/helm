@@ -45,8 +45,36 @@ state — not against an earlier summary of what was built.
   flow — register → evaluate → decision recorded → read back correctly — is covered by
   `tests/integration/test_helm_e2e.py` and by the live registration/evaluation runs above.
 
+## Second pass — 2026-08-19 (same day, deeper)
+
+A further pass specifically hunting for anything the first three passes hadn't covered: the full
+`genvm-lint` subcommand suite (not just `check`), a fresh cold re-read of the entire contract file,
+and a `genlayer trace` pull on a real transaction for full GenVM execution visibility.
+
+| # | File:Line | Severity | Scenario | Fix | Status |
+|---|---|---|---|---|---|
+| 13 | *(toolchain coverage)* | — | Only `genvm-lint check` had been run; `lint`, `validate`, `typecheck`, `schema` were never explicitly exercised. | Ran all four. `lint`: 3/3 checks. `validate`: 9 methods (5 view/4 write), matches design exactly. `typecheck`: no type errors. `schema`: constructor + all 9 methods enumerated correctly. | Verified clean |
+| 14 | `contracts/Helm.py:_extract_urls` (was) | Medium | A URL immediately followed by punctuation in natural prose (`"...at https://api.example.com/status, drops below..."`) had the trailing comma/period captured as part of the "URL" by the regex — the fetched URL is then silently wrong (typically empty/404 body), surfacing only as an unexplained `NO_ACTION` with no indication why. A real functional-correctness bug, not just a security one: this is *the natural way people write policies*. | Added `_TRAILING_PUNCTUATION = ".,;:!?)]}\"'"` stripped via `.rstrip()` on every extracted match. Regression test: `test_evaluate_strips_trailing_punctuation_from_urls`. | **Fixed, redeployed, live-verified** |
+| 15 | `contracts/Helm.py:get_policies_by_owner` (was) | Low | `Address(owner)` construction was unguarded — a malformed owner string would leak a raw SDK exception to the caller instead of a clean `UserError`. | Wrapped in `try/except Exception: raise gl.vm.UserError("Invalid owner address.")`. Regression test: `test_get_policies_by_owner_rejects_malformed_address`. | **Fixed, redeployed, live-verified** |
+
+**Live verification, this pass:**
+- `genlayer trace` on the deploy transaction: `result_code: 0`, empty `stdout`/`stderr`, clean
+  `genvm_log` metrics (`llm_module.calls: 0`, `web_module.calls: 0` — correct, `__init__` has no LLM/
+  web call). The `"runner comment does not start with version"` warning is the same benign,
+  already-investigated non-issue as prior sessions (defaults to `v0.1.0`, not a deploy blocker).
+- Finding #14, live: registered a policy with `https://en.wikipedia.org/wiki/2_%2B_2,` (trailing
+  comma, no space) on the redeployed contract, evaluated it, and confirmed `data_sources_used`
+  contains the clean URL with the comma stripped.
+- Finding #15, live: `genlayer call ... get_policies_by_owner --args "not-a-real-address"` against the
+  redeployed contract returns a decode-able error payload containing the literal ASCII
+  `"Invalid owner address."` and `"kind":"UserError"` — confirmed by inspecting the raw return bytes
+  (the CLI's `call` path doesn't format view-method reverts as cleanly as `write` does, but the
+  on-chain behavior is exactly as intended).
+
 ## Redeployment note
 
-Contracts have no upgrade mechanism, so fixing finding #2 required a fresh deploy.
-`0xBeEbD3180f4644cd58525f46E486Ef1f266E9f67` (the address from the first review pass) is superseded —
-`0x911B39fF368d872E1E98F084F2794C2018432C39` is canonical everywhere in this repo as of this audit.
+Contracts have no upgrade mechanism, so each contract-level fix required a fresh deploy:
+`0xBeEbD3180f4644cd58525f46E486Ef1f266E9f67` (first pass) →
+`0x911B39fF368d872E1E98F084F2794C2018432C39` (second pass) →
+**`0x27BF892Cd9A5B16BBf8CCad66c7a84E2B64558b3` (canonical, this pass)** — this is the address
+referenced everywhere else in this repo as of the second pass above.

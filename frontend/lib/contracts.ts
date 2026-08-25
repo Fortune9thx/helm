@@ -5,7 +5,7 @@
 export type HelmNetworkKey = "bradbury" | "studio" | "asimov";
 
 export const HELM_CONTRACT_ADDRESSES: Record<HelmNetworkKey, `0x${string}` | undefined> = {
-  bradbury: "0x911B39fF368d872E1E98F084F2794C2018432C39",
+  bradbury: "0x27BF892Cd9A5B16BBf8CCad66c7a84E2B64558b3",
   studio: undefined,
   asimov: undefined,
 };

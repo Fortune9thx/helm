@@ -31,6 +31,18 @@ def test_get_policy_not_found_reverts():
             helm.get_policy("nonexistent")
 
 
+def test_get_policies_by_owner_rejects_malformed_address():
+    """A malformed owner string must fail closed with a clean UserError,
+    not leak a raw Address-construction exception to the caller."""
+    vm = VMContext()
+    owner, = create_test_addresses(1)
+    with vm.activate():
+        vm.sender = owner
+        helm = deploy_contract(HELM_PATH, vm)
+        with vm.expect_revert("Invalid owner address"):
+            helm.get_policies_by_owner("not-a-real-address")
+
+
 def test_get_evaluation_not_found_reverts():
     vm = VMContext()
     owner, = create_test_addresses(1)
