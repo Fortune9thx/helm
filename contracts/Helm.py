@@ -174,11 +174,37 @@ def _canonicalize_payload(payload) -> str:
     """Deterministic, order-insensitive string form of an action payload for
     validator equivalence. Payloads for executable-action decisions are exact
     on-chain parameters, so the compare must ignore key insertion order but
-    nothing else; values are already calldata-safe (floats stringified) by
-    _deep_stringify before this ever runs."""
+    nothing else. None is treated as an empty payload, and numeric values
+    (raw or JSON-string) are coerced to a stable decimal string so 1.5,
+    "1.5", 1.50 and "1.50" all compare equal; anything else compares
+    exactly."""
+    if payload is None:
+        payload = {}
     if not isinstance(payload, dict):
-        return ""
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return "{}"
+
+    def canonical_value(value):
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        if isinstance(value, int):
+            return str(value)
+        if isinstance(value, float):
+            return str(int(value)) if value.is_integer() else repr(value)
+        if isinstance(value, str):
+            try:
+                num = float(value.strip())
+            except ValueError:
+                return value
+            return str(int(num)) if num.is_integer() else repr(num)
+        if value is None:
+            return "null"
+        return str(value)
+
+    return json.dumps(
+        {str(k): canonical_value(v) for k, v in payload.items()},
+        sort_keys=True,
+        separators=(",", ":"),
+    )
 
 
 def _parse_decision_json(raw) -> dict:
