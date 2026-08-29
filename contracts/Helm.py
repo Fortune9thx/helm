@@ -42,6 +42,18 @@ VALID_DECISIONS = frozenset(
     }
 )
 
+# Decisions whose recommended_action_payload IS the executed action:
+# ADJUST_PARAM / REBALANCE / SWITCH_ORACLE carry the exact parameters of an
+# executable on-chain operation, so validators must agree on the payload
+# itself (canonicalized), not only the decision enum and confidence.
+_PAYLOAD_CRITICAL_DECISIONS = frozenset(
+    {
+        DECISION_ADJUST_PARAM,
+        DECISION_REBALANCE,
+        DECISION_SWITCH_ORACLE,
+    }
+)
+
 _URL_RE = re.compile(r"https?://[^\s<>\"']+")
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 # Curly braces and triple-backtick fences are stripped from every
@@ -156,6 +168,17 @@ def _deep_stringify(value):
     if isinstance(value, (int, bool)) or value is None:
         return value
     return str(value)[:500]
+
+
+def _canonicalize_payload(payload) -> str:
+    """Deterministic, order-insensitive string form of an action payload for
+    validator equivalence. Payloads for executable-action decisions are exact
+    on-chain parameters, so the compare must ignore key insertion order but
+    nothing else; values are already calldata-safe (floats stringified) by
+    _deep_stringify before this ever runs."""
+    if not isinstance(payload, dict):
+        return ""
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
 
 def _parse_decision_json(raw) -> dict:
@@ -456,7 +479,17 @@ shape:
                 except (TypeError, ValueError):
                     return False
                 confidence_agrees = abs(my_confidence - their_confidence) < CONFIDENCE_AGREEMENT_TOLERANCE
-                return decision_agrees and confidence_agrees
+                if not decision_agrees or not confidence_agrees:
+                    return False
+                # For executable-action decisions the payload is the action:
+                # validators must additionally agree on the canonicalized
+                # recommended_action_payload, not only decision and confidence.
+                # reasoning/cited_data stay out of equivalence deliberately.
+                if mine.get("decision") in _PAYLOAD_CRITICAL_DECISIONS:
+                    return _canonicalize_payload(
+                        mine.get("recommended_action_payload")
+                    ) == _canonicalize_payload(leader_data.get("recommended_action_payload"))
+                return True
 
             result = gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
 

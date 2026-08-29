@@ -67,9 +67,10 @@ def test_evaluate_policy_reaches_consensus_on_chain(helm, accounts):
         time.sleep(3)
 
     assert evaluation is not None
-    assert evaluation["decision"] in {
-        "PAUSE", "REBALANCE", "SWITCH_ORACLE", "ADJUST_PARAM", "NO_ACTION", "ALERT",
-    }
+    # Known policy/source: Wikipedia "2 + 2 = 4" reliably confirms the
+    # arithmetic, so the expected decision is ALERT (the policy maps the
+    # confirmation to ALERT and everything else to NO_ACTION).
+    assert evaluation["decision"] == "ALERT"
     assert isinstance(evaluation["confidence"], str)
     float(evaluation["confidence"])  # must parse cleanly as a decimal string
 

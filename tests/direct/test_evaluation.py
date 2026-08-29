@@ -351,3 +351,148 @@ def test_validator_disagrees_on_different_decision():
             }
         )
         assert disagrees is False
+
+
+def test_validator_executable_decision_requires_matching_payload():
+    """ADJUST_PARAM/REBALANCE/SWITCH_ORACLE payloads ARE the action, so the
+    validator must compare the canonicalized recommended_action_payload, not
+    only decision and confidence."""
+    vm = VMContext()
+    owner, = create_test_addresses(1)
+    with vm.activate():
+        helm, policy_id = _deploy_with_policy(vm, owner)
+        vm.mock_web(r"example\.com/vault-status", _web("Collateral ratio is 121%."))
+        vm.mock_llm(
+            r"Equivalence\s+Principle",
+            _wrapped_json(
+                {
+                    "decision": "ADJUST_PARAM",
+                    "confidence": "0.90",
+                    "reasoning": "Below threshold.",
+                    "cited_data": ["121%"],
+                    "recommended_action_payload": {"min_collateral_ratio": "1.50"},
+                }
+            ),
+        )
+        helm.evaluate_policy(policy_id)
+
+        agrees = vm.run_validator(
+            leader_result={
+                "decision": "ADJUST_PARAM",
+                "confidence": "0.90",
+                "reasoning": "Below threshold.",
+                "cited_data": ["121%"],
+                "recommended_action_payload": {"min_collateral_ratio": "1.50"},
+            }
+        )
+        assert agrees is True
+
+
+def test_validator_executable_decision_rejects_differing_payload():
+    """Same executable decision and close confidence, but a different action
+    payload -- the validators must NOT agree: the parameter change is what
+    gets executed."""
+    vm = VMContext()
+    owner, = create_test_addresses(1)
+    with vm.activate():
+        helm, policy_id = _deploy_with_policy(vm, owner)
+        vm.mock_web(r"example\.com/vault-status", _web("Collateral ratio is 121%."))
+        vm.mock_llm(
+            r"Equivalence\s+Principle",
+            _wrapped_json(
+                {
+                    "decision": "ADJUST_PARAM",
+                    "confidence": "0.90",
+                    "reasoning": "Below threshold.",
+                    "cited_data": ["121%"],
+                    "recommended_action_payload": {"min_collateral_ratio": "1.45"},
+                }
+            ),
+        )
+        helm.evaluate_policy(policy_id)
+
+        disagrees = vm.run_validator(
+            leader_result={
+                "decision": "ADJUST_PARAM",
+                "confidence": "0.90",
+                "reasoning": "Below threshold.",
+                "cited_data": ["121%"],
+                "recommended_action_payload": {"min_collateral_ratio": "1.50"},
+            }
+        )
+        assert disagrees is False
+
+
+def test_validator_payload_compare_is_key_order_insensitive():
+    """Payload comparison is canonicalized: identical content with different
+    key insertion order must still agree."""
+    vm = VMContext()
+    owner, = create_test_addresses(1)
+    with vm.activate():
+        helm, policy_id = _deploy_with_policy(vm, owner)
+        vm.mock_web(r"example\.com/vault-status", _web("Collateral ratio is 121%."))
+        vm.mock_llm(
+            r"Equivalence\s+Principle",
+            _wrapped_json(
+                {
+                    "decision": "SWITCH_ORACLE",
+                    "confidence": "0.88",
+                    "reasoning": "Below threshold.",
+                    "cited_data": ["121%"],
+                    "recommended_action_payload": {
+                        "target": "oracle-b",
+                        "reason_code": "latency",
+                    },
+                }
+            ),
+        )
+        helm.evaluate_policy(policy_id)
+
+        agrees = vm.run_validator(
+            leader_result={
+                "decision": "SWITCH_ORACLE",
+                "confidence": "0.88",
+                "reasoning": "Below threshold.",
+                "cited_data": ["121%"],
+                "recommended_action_payload": {
+                    "reason_code": "latency",
+                    "target": "oracle-b",
+                },
+            }
+        )
+        assert agrees is True
+
+
+def test_validator_non_executable_decision_ignores_payload():
+    """Contrast case: PAUSE stays decision+confidence-only equivalence, so
+    differing (non-critical) payloads must not block agreement. Payload
+    comparison applies ONLY to ADJUST_PARAM / REBALANCE / SWITCH_ORACLE."""
+    vm = VMContext()
+    owner, = create_test_addresses(1)
+    with vm.activate():
+        helm, policy_id = _deploy_with_policy(vm, owner)
+        vm.mock_web(r"example\.com/vault-status", _web("Collateral ratio is 121%."))
+        vm.mock_llm(
+            r"Equivalence\s+Principle",
+            _wrapped_json(
+                {
+                    "decision": "PAUSE",
+                    "confidence": "0.90",
+                    "reasoning": "Below threshold.",
+                    "cited_data": ["121%"],
+                    "recommended_action_payload": {"reason_code": "a"},
+                }
+            ),
+        )
+        helm.evaluate_policy(policy_id)
+
+        agrees = vm.run_validator(
+            leader_result={
+                "decision": "PAUSE",
+                "confidence": "0.92",
+                "reasoning": "Below threshold.",
+                "cited_data": ["121%"],
+                "recommended_action_payload": {"reason_code": "b"},
+            }
+        )
+        assert agrees is True

@@ -5,6 +5,12 @@ const compat = new FlatCompat({
 });
 
 const eslintConfig = [
+  {
+    // Auto-generated output and types: Next.js writes next-env.d.ts (which
+    // uses triple-slash references by design) and .next/ build artifacts --
+    // none of it is hand-authored, so none of it is linted.
+    ignores: ["next-env.d.ts", ".next/**"],
+  },
   ...compat.extends("next/core-web-vitals", "next/typescript"),
 ];
 
