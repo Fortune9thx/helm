@@ -67,7 +67,26 @@ You don't literally have to name the decision in your policy text — the model 
 from context — but writing toward one clearly (rather than a vague "do something") produces more
 consistent results across evaluations.
 
-## 4. Use `action_mapping` for downstream intent, not for Helm itself
+## 4. For `ADJUST_PARAM`/`REBALANCE`/`SWITCH_ORACLE`, ask for one precise number or name
+
+These three decisions are the ones a downstream keeper is expected to *execute* — the value in
+`recommended_action_payload` isn't advisory commentary, it's the parameter that gets applied. Because
+of that, validators are required to agree on the payload itself, not just the decision label (see
+[`SECURITY.md`](./SECURITY.md) §6). Two independent model runs will naturally reach the exact same
+*number* far more reliably than the exact same *paragraph* — so phrase the condition so the answer is
+one clean value, not an open-ended judgment call.
+
+**Bad** (invites a differently-worded payload every run, e.g. "reduce slightly" vs. "lower by 10%"):
+> "If liquidity looks thin, adjust the fee parameter to something more conservative."
+
+**Good** (the payload has exactly one correct value to converge on):
+> "If the utilization rate at https://api.example.com/pool/status exceeds 90%, ADJUST_PARAM to set
+> the borrow_fee_bps to 250."
+
+`PAUSE`/`ALERT`/`NO_ACTION` don't have this constraint — their payload is context only, so it's fine
+to leave it looser for those three.
+
+## 5. Use `action_mapping` for downstream intent, not for Helm itself
 
 `action_mapping` is shown to the model as context (it helps the model understand *why* a decision
 matters), but **Helm itself never calls another contract**. Cross-contract writes are confirmed to
@@ -79,13 +98,13 @@ can parse or read directly:
 
 > "PAUSE -> call vault.pause(); NO_ACTION -> do nothing."
 
-## 5. Keep it short — the caps are enforced, not suggestions
+## 6. Keep it short — the caps are enforced, not suggestions
 
 `policy_text` is capped at 1200 characters and `action_mapping` at 800, enforced in the contract
 itself (input beyond the cap is silently truncated, not rejected). Say the condition once, precisely,
 rather than padding it with repeated caveats.
 
-## 6. Expect `NO_ACTION` far more often than not — that's correct
+## 7. Expect `NO_ACTION` far more often than not — that's correct
 
 Helm fails closed by design (see [`SECURITY.md`](./SECURITY.md) §4): insufficient evidence, an
 ambiguous condition, or confidence below 0.78 all resolve to `NO_ACTION`. If you're seeing `NO_ACTION`
@@ -96,7 +115,7 @@ when you expected otherwise, check first whether:
 - The threshold is a real, specific number/fact rather than a subjective judgment call the model has
   no basis to make confidently.
 
-## 7. Re-evaluate, don't over-trust a single reading
+## 8. Re-evaluate, don't over-trust a single reading
 
 Live data changes. `evaluate_policy` re-fetches fresh data on every call — nothing is cached from a
 prior evaluation. If your use case needs continuous monitoring, trigger `evaluate_policy` on whatever

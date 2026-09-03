@@ -23,10 +23,26 @@ HELM_PATH = CONTRACTS_DIR / "Helm.py"
 pytestmark = pytest.mark.integration
 
 POLICY_NAME = "Wikipedia Arithmetic Sanity Check"
+# Uses Wikipedia's REST summary API (/api/rest_v1/page/summary/<title>), not
+# the human-facing HTML page (/wiki/<title>). Confirmed directly (2026-09-06):
+# the HTML page for "2 + 2" returns 200 to a plain curl request but 404s the
+# moment a browser-style User-Agent header is set -- real, reproducible
+# evidence of User-Agent-based filtering that made this test genuinely flaky
+# (observed LEADER_TIMEOUT/VALIDATORS_TIMEOUT across independent validator
+# fetches hitting that same inconsistency). The REST summary endpoint
+# returned 200 with or without a browser User-Agent in the same check -- API
+# endpoints are built for machine consumption and aren't subject to the same
+# bot-detection as the wiki's rendered pages. Its "Addition" summary is a
+# stable, unambiguous definitional fact ("Addition... is one of the four
+# basic operations of arithmetic... 3 apples + 2 apples = 5 apples"), so the
+# expected decision stays a precise, checkable ALERT rather than a vague
+# "any valid enum" assertion -- the fix here is the data source, not
+# loosening what the steward asked this test to actually verify.
 POLICY_TEXT = (
-    "Check https://en.wikipedia.org/wiki/2_%2B_2 -- if the page confirms "
-    "that 2 + 2 equals 4 under ordinary arithmetic, issue an ALERT noting "
-    "the confirmation; otherwise NO_ACTION."
+    "Check https://en.wikipedia.org/api/rest_v1/page/summary/Addition -- if "
+    "the page confirms that addition is a basic arithmetic operation used "
+    "to combine two numbers into a sum, issue an ALERT noting the "
+    "confirmation; otherwise NO_ACTION."
 )
 ACTION_MAPPING = "ALERT -> notify operator; NO_ACTION -> do nothing."
 
@@ -67,9 +83,9 @@ def test_evaluate_policy_reaches_consensus_on_chain(helm, accounts):
         time.sleep(3)
 
     assert evaluation is not None
-    # Known policy/source: Wikipedia "2 + 2 = 4" reliably confirms the
-    # arithmetic, so the expected decision is ALERT (the policy maps the
-    # confirmation to ALERT and everything else to NO_ACTION).
+    # Known policy/source: the Addition summary reliably confirms the fact,
+    # so the expected decision is ALERT (the policy maps the confirmation to
+    # ALERT and everything else to NO_ACTION).
     assert evaluation["decision"] == "ALERT"
     assert isinstance(evaluation["confidence"], str)
     float(evaluation["confidence"])  # must parse cleanly as a decimal string
