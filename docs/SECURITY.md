@@ -94,12 +94,26 @@ being the sole line of defense.
 
 `evaluate_policy` uses `gl.vm.run_nondet_unsafe(leader_fn, validator_fn)`: every validator
 independently re-runs the exact same `leader_fn` (same prompt, same live-data fetch) and
-`validator_fn` accepts the leader's result only if the validator's own independent run agrees on both
+`validator_fn` accepts the leader's result only if the validator's own independent run agrees on
 `decision` (exact match) and `confidence` (within a 0.15 tolerance band). A single compromised or
 successfully-injected leader cannot unilaterally push a decision to chain state — it has to convince
 a majority of independently-reasoning validators to reach the same conclusion from the same evidence.
 This is GenLayer's core trust mechanism, not a Helm-specific addition, and it is what makes the
 confidence/schema gates above a second layer rather than the only layer.
+
+**`ADJUST_PARAM`/`REBALANCE`/`SWITCH_ORACLE` require payload agreement too.** For these three
+decisions, `recommended_action_payload` *is* the executable action a downstream keeper acts on — a
+number in that payload is not advisory commentary, it's the parameter that gets applied. Agreeing on
+the decision label alone (e.g. both validators say `ADJUST_PARAM`) while disagreeing on the payload
+(one says `min_collateral_ratio: 1.50`, another says `1.45`) would let a stale majority-agreed
+`decision` field carry a leader-only, unverified number to chain state. `validator_fn` additionally
+requires `_canonicalize_payload(mine["recommended_action_payload"]) ==
+_canonicalize_payload(leader_data["recommended_action_payload"])` for exactly these three decisions.
+Canonicalization is order-insensitive (`{"a":1,"b":2}` equals `{"b":2,"a":1}`) and numeric-format-
+insensitive (`"1.5"`, `1.5`, and `"1.50"` all compare equal), so validators don't spuriously disagree
+over trivial formatting differences in what is otherwise the same proposed parameter. `PAUSE`/`ALERT`/
+`NO_ACTION` are unaffected — their payload is context, not an executed parameter, so differing payload
+content does not block agreement for those three.
 
 ## 7. Deterministic pre-checks before any non-deterministic call
 
